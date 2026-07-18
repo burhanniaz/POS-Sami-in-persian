@@ -86,6 +86,55 @@ export function buildReceiptEscPos({
   return Buffer.from(out, "utf8").toString("base64");
 }
 
+// Plain, human-readable version of the same receipt content — no ESC/POS control
+// bytes. Used for the manual browser-print fallback and for previewing/verifying
+// exact receipt content (item names, totals, customer) without a physical printer.
+export function buildReceiptPlainText({
+  storeName = "فروشگاه",
+  storeAddress,
+  storePhone,
+  terminalName,
+  cashierName,
+  saleId,
+  createdAt,
+  items,
+  subtotal,
+  discountAmount,
+  total,
+  paymentMethod,
+  cashPaid,
+  loanPaid,
+  customerName,
+}) {
+  let out = "";
+  out += storeName + "\n";
+  if (storeAddress) out += storeAddress + "\n";
+  if (storePhone) out += storePhone + "\n";
+  out += line();
+  out += `Terminal: ${terminalName}  Cashier: ${cashierName}\n`;
+  out += `Sale #${saleId}\n${new Date(createdAt).toISOString()}\n`;
+  out += line();
+
+  for (const it of items) {
+    out += padRight(it.name, 20) + padLeft(it.qty, 4) + padLeft(it.lineTotal, 8) + "\n";
+  }
+
+  out += line();
+  out += padRight("Subtotal", 22) + padLeft(subtotal, 10) + "\n";
+  if (Number(discountAmount) > 0) {
+    out += padRight("Discount", 22) + padLeft("-" + discountAmount, 10) + "\n";
+  }
+  out += padRight("Total", 22) + padLeft(total, 10) + "\n";
+  out += line();
+  out += `Payment: ${paymentMethod}\n`;
+  if (Number(cashPaid) > 0) out += padRight("Cash", 22) + padLeft(cashPaid, 10) + "\n";
+  if (Number(loanPaid) > 0) out += padRight("On Loan", 22) + padLeft(loanPaid, 10) + "\n";
+  if (customerName) out += `Customer: ${customerName}\n`;
+  out += "\nThank you\n";
+
+  return out;
+}
+
 // Barcode label for a newly-generated (non-vendor) product barcode.
 export function buildBarcodeLabelEscPos({ productName, barcode }) {
   let out = "";

@@ -60,7 +60,7 @@ export async function printReceipt(base64Payload, { printerName, plainTextFallba
     }
   }
 
-  printViaBrowser(plainTextFallback || "Print agent unavailable — open Inventory > receipt detail for text.");
+  printViaBrowser(plainTextFallback || "Print agent unavailable — open Inventory > receipt detail for text.", logoUrl);
   return { method: "browser-fallback" };
 }
 
@@ -79,11 +79,24 @@ async function fetchImageAsBase64(url) {
   return dataUrl.split(",")[1];
 }
 
-function printViaBrowser(text) {
+// Exported so callers can trigger this directly from a fresh click handler.
+// window.open() called deep inside an async chain (after the checkout API call
+// and a QZ connect attempt) can lose the browser's "user activation" and get
+// silently blocked with no error — calling this from a real click event avoids that.
+export function printReceiptWindow(text, logoUrl) {
+  printViaBrowser(text, logoUrl);
+}
+
+function printViaBrowser(text, logoUrl) {
   const win = window.open("", "_blank", "width=320,height=600");
   if (!win) return;
+  const logoHtml = logoUrl
+    ? `<div style="text-align:center;margin-bottom:8px;"><img src="${escapeHtml(
+        logoUrl
+      )}" style="max-width:200px;max-height:120px;" /></div>`
+    : "";
   win.document.write(
-    `<pre style="font-family:monospace;font-size:12px;white-space:pre-wrap;margin:0;padding:12px;">${escapeHtml(
+    `${logoHtml}<pre style="font-family:monospace;font-size:12px;white-space:pre-wrap;margin:0;padding:12px;">${escapeHtml(
       text
     )}</pre>`
   );

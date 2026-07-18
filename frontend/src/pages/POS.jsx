@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, resolveImageUrl } from "../api/client.js";
 import { formatMoney, formatQty } from "../lib/format.js";
-import { printReceipt } from "../lib/print.js";
+import { printReceipt, printReceiptWindow } from "../lib/print.js";
 import { Icon } from "../components/Icon.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
@@ -15,6 +15,8 @@ export default function POS() {
   const [customerId, setCustomerId] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [error, setError] = useState("");
+  const [lastReceiptText, setLastReceiptText] = useState(null);
+  const [lastReceiptLogo, setLastReceiptLogo] = useState(null);
 
   async function loadProducts() {
     const data = await api.get(`/products${query ? `?q=${encodeURIComponent(query)}` : ""}`);
@@ -216,6 +218,10 @@ export default function POS() {
           customerId={customerId}
           customers={customers}
           onClose={() => setCheckoutOpen(false)}
+          onReceiptReady={(text, logoUrl) => {
+            setLastReceiptText(text);
+            setLastReceiptLogo(logoUrl);
+          }}
           onSuccess={() => {
             setCart([]);
             setCheckoutOpen(false);
@@ -225,11 +231,25 @@ export default function POS() {
         />
       )}
       {error && <p className="rtl text-xs text-danger fixed bottom-4 right-4 bg-card px-3 py-2 rounded-lg">{error}</p>}
+      {lastReceiptText && (
+        <div className="fixed bottom-4 left-4 bg-card rounded-lg shadow-lg p-3 flex items-center gap-2 rtl">
+          <span className="text-xs text-subtle">آخرین رسید آماده چاپ است</span>
+          <button
+            onClick={() => printReceiptWindow(lastReceiptText, lastReceiptLogo)}
+            className="h-8 px-3 rounded-lg bg-accent text-white text-xs font-semibold"
+          >
+            چاپ رسید
+          </button>
+          <button onClick={() => { setLastReceiptText(null); setLastReceiptLogo(null); }} className="text-muted">
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-function CheckoutModal({ cart, subtotal, customerId, customers, onClose, onSuccess }) {
+function CheckoutModal({ cart, subtotal, customerId, customers, onClose, onSuccess, onReceiptReady }) {
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountAmount, setDiscountAmount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState("CASH");
@@ -272,10 +292,14 @@ function CheckoutModal({ cart, subtotal, customerId, customers, onClose, onSucce
         adminApproval: needsApproval ? { username: adminUser, password: adminPass } : undefined,
       };
       const res = await api.post("/sales", payload);
+      const logoUrl = resolveImageUrl(res.logoUrl);
       await printReceipt(res.receiptPrintJob, {
-        plainTextFallback: `Sale #${res.sale.id}\nTotal: ${formatMoney(res.sale.total)}`,
-        logoUrl: resolveImageUrl(res.logoUrl),
+        plainTextFallback: res.receiptText,
+        logoUrl,
       });
+      // Hand the full receipt text + logo up to the parent (this modal unmounts as
+      // soon as onSuccess() runs below) so a manual print/preview stays available.
+      onReceiptReady(res.receiptText, logoUrl);
       onSuccess();
     } catch (err) {
       if (err.data?.needsApproval) {

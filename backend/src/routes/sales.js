@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { logAction } from "../utils/audit.js";
-import { buildReceiptEscPos } from "../utils/escpos.js";
+import { buildReceiptEscPos, buildReceiptPlainText } from "../utils/escpos.js";
 
 export const salesRouter = Router();
 
@@ -155,7 +155,7 @@ salesRouter.post("/", requireAuth, async (req, res) => {
       getSetting("STORE_LOGO_URL", ""),
     ]);
 
-    const receiptPayload = buildReceiptEscPos({
+    const receiptFields = {
       storeName,
       storeAddress,
       storePhone,
@@ -171,9 +171,11 @@ salesRouter.post("/", requireAuth, async (req, res) => {
       cashPaid: result.cashPaid,
       loanPaid: result.loanPaid,
       customerName: result.customer?.name,
-    });
+    };
+    const receiptPayload = buildReceiptEscPos(receiptFields);
+    const receiptText = buildReceiptPlainText(receiptFields);
 
-    res.status(201).json({ sale: result, receiptPrintJob: receiptPayload, logoUrl: logoUrl || null });
+    res.status(201).json({ sale: result, receiptPrintJob: receiptPayload, receiptText, logoUrl: logoUrl || null });
   } catch (err) {
     if (err instanceof HttpError) {
       return res.status(err.status).json({ error: err.message, ...err.extra });
