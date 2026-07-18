@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Persian labels sit RTL inside the LTR component flow; numbers stay LTR + tabular */
+.rtl {
+  direction: rtl;
+  text-align: right;
+}
+
+.num {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-variant-numeric: tabular-nums;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  scrollbar-width: none;
+}

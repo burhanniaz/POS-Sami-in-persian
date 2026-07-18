@@ -1,0 +1,19 @@
+version: "3.8"
+
+# For local testing only. In production, point DATABASE_URL at your
+# EasyPanel-hosted or Neon PostgreSQL instance instead of this container.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pos_user
+      POSTGRES_PASSWORD: pos_password
+      POSTGRES_DB: pos_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pos_pgdata:/var/lib/postgresql/data
+
+volumes:
+  pos_pgdata:
