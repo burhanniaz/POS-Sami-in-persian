@@ -7,8 +7,8 @@ import { buildReceiptEscPos } from "../utils/escpos.js";
 
 export const salesRouter = Router();
 
-async function getSetting(key, fallback) {
-  const row = await prisma.appSetting.findUnique({ where: { key } });
+async function getSetting(key, fallback, client = prisma) {
+  const row = await client.appSetting.findUnique({ where: { key } });
   return row ? row.value : fallback;
 }
 
@@ -78,8 +78,8 @@ salesRouter.post("/", requireAuth, async (req, res) => {
       const total = Math.max(0, subtotal - discountAmount);
 
       // Discount authorization: check against configured threshold
-      const pctThreshold = Number(await getSetting("DISCOUNT_APPROVAL_THRESHOLD_PERCENT", "15"));
-      const amtThreshold = Number(await getSetting("DISCOUNT_APPROVAL_THRESHOLD_AMOUNT", "500000"));
+      const pctThreshold = Number(await getSetting("DISCOUNT_APPROVAL_THRESHOLD_PERCENT", "15", tx));
+      const amtThreshold = Number(await getSetting("DISCOUNT_APPROVAL_THRESHOLD_AMOUNT", "500000", tx));
       const discountPercentOfSubtotal = subtotal > 0 ? (discountAmount / subtotal) * 100 : 0;
       const needsApproval = discountPercentOfSubtotal > pctThreshold || discountAmount > amtThreshold;
 
@@ -139,7 +139,7 @@ salesRouter.post("/", requireAuth, async (req, res) => {
       });
 
       return sale;
-    });
+    }, { timeout: 15000, maxWait: 10000 });
 
     await logAction({
       terminalId: req.auth.terminalId,

@@ -83,7 +83,7 @@ export function buildReceiptEscPos({
   if (withDrawerKick) out += CMD.DRAWER_KICK;
   out += CMD.CUT;
 
-  return Buffer.from(out, "binary").toString("base64");
+  return Buffer.from(out, "utf8").toString("base64");
 }
 
 // Barcode label for a newly-generated (non-vendor) product barcode.
@@ -99,7 +99,7 @@ export function buildBarcodeLabelEscPos({ productName, barcode }) {
   out += GS + "k" + "\x04" + barcode + "\x00"; // m=4 => CODE39
   out += "\n\n";
   out += CMD.CUT;
-  return Buffer.from(out, "binary").toString("base64");
+  return Buffer.from(out, "utf8").toString("base64");
 }
 
 // Generates a unique internal barcode for products with no vendor barcode.

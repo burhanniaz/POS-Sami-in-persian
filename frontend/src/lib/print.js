@@ -39,7 +39,18 @@ export async function printReceipt(base64Payload, { printerName, plainTextFallba
       const config = qz.configs.create(printer);
       const data = [];
       if (logoUrl) {
-        data.push({ type: "raster", format: "image", data: logoUrl, options: { language: "ESCPOS" } });
+        // QZ Tray has no "raster" type — embedding an image in a raw ESC/POS job
+        // requires type:'raw', format:'image', flavor:'base64' with actual base64
+        // image bytes (not a URL). Fetch + convert here; if that fails for any
+        // reason (bad URL, network hiccup), skip the logo but still print the
+        // text receipt rather than failing the whole job.
+        const logoBase64 = await fetchImageAsBase64(logoUrl).catch((err) => {
+          console.warn("Could not load receipt logo, printing without it:", err.message);
+          return null;
+        });
+        if (logoBase64) {
+          data.push({ type: "raw", format: "image", flavor: "base64", data: logoBase64, options: { language: "ESCPOS" } });
+        }
       }
       data.push({ type: "raw", format: "base64", data: base64Payload });
       await qz.print(config, data);
@@ -51,6 +62,21 @@ export async function printReceipt(base64Payload, { printerName, plainTextFallba
 
   printViaBrowser(plainTextFallback || "Print agent unavailable — open Inventory > receipt detail for text.");
   return { method: "browser-fallback" };
+}
+
+// Fetches an image URL and returns its raw bytes as a plain base64 string
+// (no "data:image/..." prefix — QZ Tray's base64 flavor expects bare base64).
+async function fetchImageAsBase64(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Logo fetch failed: HTTP ${res.status}`);
+  const blob = await res.blob();
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("FileReader failed to read logo blob"));
+    reader.readAsDataURL(blob);
+  });
+  return dataUrl.split(",")[1];
 }
 
 function printViaBrowser(text) {
