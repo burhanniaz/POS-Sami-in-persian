@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # POS system
 
 Multi-terminal point-of-sale system: Node/Express + PostgreSQL (Prisma) backend, React (Vite) frontend, Persian UI.
@@ -85,3 +86,6 @@ Change these anytime without touching code.
 - Backend: deploy the `backend/` folder to EasyPanel (or any Node host), set `DATABASE_URL` to your EasyPanel/Neon Postgres, run `npx prisma migrate deploy` once, then `npm run seed` once.
 - Frontend: `npm run build` in `frontend/`, serve the `dist/` folder (EasyPanel static site, or any static host), and set `VITE_API_URL` to your deployed backend URL at build time.
 - Each terminal PC needs QZ Tray installed locally for its own printer — this never touches the cloud server.
+=======
+# POS-Sami-in-persian
+>>>>>>> f897a5ed41d4a1c8b299c46ab82a4e3fd4e31feb
