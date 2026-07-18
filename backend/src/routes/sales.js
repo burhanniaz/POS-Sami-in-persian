@@ -4,12 +4,22 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { logAction } from "../utils/audit.js";
 import { buildReceiptEscPos, buildReceiptPlainText } from "../utils/escpos.js";
+import { HttpError } from "../utils/httpError.js";
 
 export const salesRouter = Router();
 
 async function getSetting(key, fallback, client = prisma) {
   const row = await client.appSetting.findUnique({ where: { key } });
   return row ? row.value : fallback;
+}
+
+// Coerces to a finite number or throws a clean 400 instead of letting NaN
+// silently slip through every downstream check (NaN <= 0 and NaN > x both
+// evaluate to false, which used to defeat the stock/qty guards entirely).
+function requireFiniteNumber(value, label) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) throw new HttpError(400, `${label} must be a valid number`);
+  return n;
 }
 
 // Checkout. Body:
@@ -41,7 +51,8 @@ salesRouter.post("/", requireAuth, async (req, res) => {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      let subtotal = 0;
+      let grossSubtotal = 0; // sum of full-price line totals, before ANY discount
+      let lineDiscountTotal = 0; // sum of every per-line discount
       const lineItems = [];
 
       for (const it of items) {
@@ -54,16 +65,27 @@ salesRouter.post("/", requireAuth, async (req, res) => {
         const product = rows[0];
         if (!product) throw new HttpError(404, `Product ${it.productId} not found`);
 
-        const qty = Number(it.qty);
-        if (qty <= 0) throw new HttpError(400, "qty must be positive");
+        const qty = requireFiniteNumber(it.qty, `qty for ${product.name}`);
+        if (qty <= 0) throw new HttpError(400, `qty for ${product.name} must be positive`);
         if (Number(product.stockQty) < qty) {
           throw new HttpError(409, `Insufficient stock for ${product.name} (have ${product.stockQty}, need ${qty})`);
         }
 
         const unitPrice = Number(product.salePrice);
-        const lineDiscount = Number(it.discountAmount || 0);
-        const lineTotal = unitPrice * qty - lineDiscount;
-        subtotal += lineTotal;
+        const grossLineTotal = unitPrice * qty;
+
+        // Per-line discount is bounded to the line's own value — it can never
+        // make a line negative, and (crucially) it's now folded into the same
+        // discount total the approval-threshold check runs against below, so
+        // a cashier can no longer zero out a sale by discounting individual
+        // lines instead of using the cart-level discount fields.
+        const requestedLineDiscount = requireFiniteNumber(it.discountAmount || 0, `discount for ${product.name}`);
+        if (requestedLineDiscount < 0) throw new HttpError(400, `discount for ${product.name} cannot be negative`);
+        const lineDiscount = Math.min(requestedLineDiscount, grossLineTotal);
+        const lineTotal = grossLineTotal - lineDiscount;
+
+        grossSubtotal += grossLineTotal;
+        lineDiscountTotal += lineDiscount;
 
         lineItems.push({ productId: it.productId, qty, unitPrice, discountAmount: lineDiscount, lineTotal });
 
@@ -74,13 +96,24 @@ salesRouter.post("/", requireAuth, async (req, res) => {
         });
       }
 
-      const discountAmount = Number(cartDiscountAmount) + Number(subtotal * (Number(cartDiscountPercent) / 100));
-      const total = Math.max(0, subtotal - discountAmount);
+      const cartDiscountAmountNum = requireFiniteNumber(cartDiscountAmount, "cartDiscountAmount");
+      const cartDiscountPercentNum = requireFiniteNumber(cartDiscountPercent, "cartDiscountPercent");
+      if (cartDiscountAmountNum < 0) throw new HttpError(400, "cartDiscountAmount cannot be negative");
+      if (cartDiscountPercentNum < 0 || cartDiscountPercentNum > 100) {
+        throw new HttpError(400, "cartDiscountPercent must be between 0 and 100");
+      }
 
-      // Discount authorization: check against configured threshold
+      // Total discount = every per-line discount + the cart-level discount,
+      // all measured against the gross (pre-discount) subtotal. This is the
+      // figure the approval threshold is checked against, so there's no path
+      // — line discounts, cart discount, or a mix of both — that avoids it.
+      const cartDiscount = cartDiscountAmountNum + grossSubtotal * (cartDiscountPercentNum / 100);
+      const discountAmount = Math.min(grossSubtotal, lineDiscountTotal + cartDiscount);
+      const total = Math.max(0, grossSubtotal - discountAmount);
+
       const pctThreshold = Number(await getSetting("DISCOUNT_APPROVAL_THRESHOLD_PERCENT", "15", tx));
       const amtThreshold = Number(await getSetting("DISCOUNT_APPROVAL_THRESHOLD_AMOUNT", "500000", tx));
-      const discountPercentOfSubtotal = subtotal > 0 ? (discountAmount / subtotal) * 100 : 0;
+      const discountPercentOfSubtotal = grossSubtotal > 0 ? (discountAmount / grossSubtotal) * 100 : 0;
       const needsApproval = discountPercentOfSubtotal > pctThreshold || discountAmount > amtThreshold;
 
       let approvedById = null;
@@ -99,8 +132,9 @@ salesRouter.post("/", requireAuth, async (req, res) => {
       }
 
       // Payment validation
-      const cash = Number(cashPaid);
-      const loan = Number(loanPaid);
+      const cash = requireFiniteNumber(cashPaid, "cashPaid");
+      const loan = requireFiniteNumber(loanPaid, "loanPaid");
+      if (cash < 0 || loan < 0) throw new HttpError(400, "cashPaid and loanPaid cannot be negative");
       if (Math.abs(cash + loan - total) > 0.01) {
         throw new HttpError(400, `cashPaid + loanPaid (${cash + loan}) must equal total (${total})`);
       }
@@ -120,7 +154,7 @@ salesRouter.post("/", requireAuth, async (req, res) => {
           terminalId: req.auth.terminalId,
           cashierId: req.auth.id,
           customerId: customerId || undefined,
-          subtotal,
+          subtotal: grossSubtotal,
           discountAmount,
           discountPercent: discountPercentOfSubtotal,
           total,
@@ -180,10 +214,11 @@ salesRouter.post("/", requireAuth, async (req, res) => {
     if (err instanceof HttpError) {
       return res.status(err.status).json({ error: err.message, ...err.extra });
     }
+    // Log the full detail server-side only; the client gets a safe, generic
+    // message. Raw Prisma/DB error text (previously sent verbatim) can
+    // contain schema and query internals.
     console.error("Checkout failed:", err);
-    // Include err.message (not just a generic string) so the real cause is visible
-    // in the response instead of only in the server console.
-    res.status(500).json({ error: `Checkout failed, transaction rolled back: ${err.message}` });
+    res.status(500).json({ error: "Checkout failed, transaction rolled back. Please try again." });
   }
 });
 
@@ -213,11 +248,3 @@ salesRouter.get("/:id", requireAuth, async (req, res) => {
   if (!sale) return res.status(404).json({ error: "Not found" });
   res.json(sale);
 });
-
-class HttpError extends Error {
-  constructor(status, message, extra) {
-    super(message);
-    this.status = status;
-    this.extra = extra;
-  }
-}

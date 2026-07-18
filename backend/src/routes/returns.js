@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { logAction } from "../utils/audit.js";
+import { HttpError } from "../utils/httpError.js";
 
 export const returnsRouter = Router();
 
@@ -26,6 +27,20 @@ returnsRouter.post("/", requireAuth, async (req, res) => {
       });
       if (!sale) throw new HttpError(404, "Original sale not found");
 
+      // Every saleItem this return references, plus everything already
+      // returned against it in the past. Without this, the same saleItemId
+      // could be returned over and over — each call independently checks
+      // only against the *original* sale quantity, so nothing stopped
+      // unlimited repeat refunds + restocks against one sale item.
+      const saleItemIds = items.map((it) => it.saleItemId);
+      const priorReturnItems = await tx.returnItem.findMany({
+        where: { saleItemId: { in: saleItemIds } },
+      });
+      const alreadyReturnedByItem = {};
+      for (const ri of priorReturnItems) {
+        alreadyReturnedByItem[ri.saleItemId] = (alreadyReturnedByItem[ri.saleItemId] || 0) + Number(ri.qty);
+      }
+
       let totalRefund = 0;
       const returnItems = [];
 
@@ -34,9 +49,20 @@ returnsRouter.post("/", requireAuth, async (req, res) => {
         if (!saleItem) throw new HttpError(404, `Sale item ${it.saleItemId} not part of this sale`);
 
         const qty = Number(it.qty);
-        if (qty <= 0 || qty > Number(saleItem.qty)) {
+        if (!Number.isFinite(qty) || qty <= 0) {
           throw new HttpError(400, `Invalid return qty for item ${it.saleItemId}`);
         }
+
+        const alreadyReturned = alreadyReturnedByItem[it.saleItemId] || 0;
+        const remaining = Number(saleItem.qty) - alreadyReturned;
+        if (qty > remaining) {
+          throw new HttpError(
+            409,
+            `Cannot return ${qty} of item ${it.saleItemId} — only ${remaining} remaining (already returned: ${alreadyReturned})`
+          );
+        }
+        // Guard against the same saleItemId appearing twice in one request body.
+        alreadyReturnedByItem[it.saleItemId] = alreadyReturned + qty;
 
         const unitRefund = Number(saleItem.lineTotal) / Number(saleItem.qty);
         const refundAmount = unitRefund * qty;
@@ -91,8 +117,8 @@ returnsRouter.post("/", requireAuth, async (req, res) => {
     res.status(201).json(result);
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
-    console.error(err);
-    res.status(500).json({ error: "Return failed, transaction rolled back" });
+    console.error("Return failed:", err);
+    res.status(500).json({ error: "Return failed, transaction rolled back. Please try again." });
   }
 });
 
@@ -104,10 +130,3 @@ returnsRouter.get("/", requireAuth, async (req, res) => {
   });
   res.json(returns);
 });
-
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}

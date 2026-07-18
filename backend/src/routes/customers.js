@@ -37,8 +37,16 @@ customersRouter.get("/:id", requireAuth, async (req, res) => {
 customersRouter.post("/", requireAuth, async (req, res) => {
   const { name, cnic, address, phone, creditLimit } = req.body;
   if (!name) return res.status(400).json({ error: "name required" });
+
+  // Only an admin session may grant a starting credit limit here — a cashier
+  // creating a customer always starts them at 0 credit. Raising it afterward
+  // still requires the dedicated admin-only PUT /:id/credit-limit endpoint.
+  // (Previously any authenticated cashier could set an arbitrary creditLimit
+  // right here and immediately use it for a loan sale.)
+  const initialCreditLimit = req.auth.role === "admin" ? creditLimit ?? 0 : 0;
+
   const customer = await prisma.customer.create({
-    data: { name, cnic, address, phone, creditLimit: creditLimit ?? 0 },
+    data: { name, cnic, address, phone, creditLimit: initialCreditLimit },
   });
   await logAction({
     terminalId: req.auth.terminalId,
@@ -53,10 +61,13 @@ customersRouter.post("/", requireAuth, async (req, res) => {
 // Only admin can change a customer's credit limit
 customersRouter.put("/:id/credit-limit", requireAdmin, async (req, res) => {
   const { creditLimit } = req.body;
-  if (creditLimit == null) return res.status(400).json({ error: "creditLimit required" });
+  const limit = Number(creditLimit);
+  if (creditLimit == null || !Number.isFinite(limit) || limit < 0) {
+    return res.status(400).json({ error: "creditLimit must be a non-negative number" });
+  }
   const customer = await prisma.customer.update({
     where: { id: req.params.id },
-    data: { creditLimit },
+    data: { creditLimit: limit },
   });
   await logAction({
     adminId: req.auth.id,

@@ -55,30 +55,55 @@ productsRouter.post("/", requireAdmin, async (req, res) => {
   if (!name || costPrice == null || salePrice == null) {
     return res.status(400).json({ error: "name, costPrice, salePrice are required" });
   }
-
-  let finalBarcode = barcode?.trim();
-  let barcodeGenerated = false;
-  if (!finalBarcode) {
-    const count = await prisma.product.count();
-    finalBarcode = generateInternalBarcode(count + 1);
-    barcodeGenerated = true;
+  if (!Number.isFinite(Number(costPrice)) || !Number.isFinite(Number(salePrice)) || Number(costPrice) < 0 || Number(salePrice) < 0) {
+    return res.status(400).json({ error: "costPrice and salePrice must be non-negative numbers" });
   }
 
-  const product = await prisma.product.create({
-    data: {
-      name,
-      barcode: finalBarcode,
-      barcodeGenerated,
-      imageUrl,
-      category,
-      costPrice,
-      salePrice,
-      stockQty: stockQty ?? 0,
-      unit: unit ?? "piece",
-      lowStockThreshold: lowStockThreshold ?? 5,
-      supplierId: supplierId || undefined,
-    },
-  });
+  const requestedBarcode = barcode?.trim();
+
+  // Two admins/terminals creating a product at the same instant could
+  // previously both read the same product count and generate the identical
+  // auto-barcode, then crash on the unique constraint. Retry a few times
+  // with a fresh count on conflict instead of failing the whole request.
+  let product;
+  let barcodeGenerated = false;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    let finalBarcode = requestedBarcode;
+    barcodeGenerated = false;
+    if (!finalBarcode) {
+      const count = await prisma.product.count();
+      finalBarcode = generateInternalBarcode(count + 1 + attempt);
+      barcodeGenerated = true;
+    }
+
+    try {
+      product = await prisma.product.create({
+        data: {
+          name,
+          barcode: finalBarcode,
+          barcodeGenerated,
+          imageUrl,
+          category,
+          costPrice,
+          salePrice,
+          stockQty: stockQty ?? 0,
+          unit: unit ?? "piece",
+          lowStockThreshold: lowStockThreshold ?? 5,
+          supplierId: supplierId || undefined,
+        },
+      });
+      break;
+    } catch (err) {
+      const isBarcodeConflict = err.code === "P2002" && barcodeGenerated;
+      if (!isBarcodeConflict || attempt === 4) {
+        if (err.code === "P2002") {
+          return res.status(409).json({ error: "That barcode is already in use by another product" });
+        }
+        throw err;
+      }
+      // otherwise loop and retry with a new generated barcode
+    }
+  }
 
   await logAction({ adminId: req.auth.id, action: "product.create", details: { productId: product.id } });
 
@@ -102,11 +127,14 @@ productsRouter.put("/:id", requireAdmin, async (req, res) => {
 // Manual stock adjustment (receiving new stock, correction, etc.)
 productsRouter.post("/:id/adjust-stock", requireAuth, async (req, res) => {
   const { delta, reason } = req.body;
-  if (delta == null) return res.status(400).json({ error: "delta required" });
+  const deltaNum = Number(delta);
+  if (delta == null || !Number.isFinite(deltaNum)) {
+    return res.status(400).json({ error: "delta must be a valid number" });
+  }
 
   const product = await prisma.product.update({
     where: { id: req.params.id },
-    data: { stockQty: { increment: delta } },
+    data: { stockQty: { increment: deltaNum } },
   });
 
   await logAction({

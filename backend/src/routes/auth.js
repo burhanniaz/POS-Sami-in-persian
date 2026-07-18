@@ -1,11 +1,26 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
 import { prisma } from "../db.js";
 import { signToken, requireAuth, requireAdmin } from "../middleware/auth.js";
 import { logAction } from "../utils/audit.js";
 import { uploadStoreLogo } from "../middleware/upload.js";
 
 export const authRouter = Router();
+
+// PINs are short (4-6 digits) and admin passwords may be reused across a
+// small team, so both login endpoints need real brute-force protection.
+// Keyed by IP + the identifier being attacked, so one bad terminal can't
+// lock everyone else out, but repeated guesses against one cashier/admin
+// from anywhere are still throttled.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `${req.ip}:${req.body?.cashierId || req.body?.username || ""}`,
+  handler: (req, res) => res.status(429).json({ error: "Too many login attempts. Please wait and try again." }),
+});
 
 // List cashiers for the PIN-pad screen (name only, no secrets)
 authRouter.get("/cashiers", async (req, res) => {
@@ -18,7 +33,7 @@ authRouter.get("/cashiers", async (req, res) => {
 });
 
 // Cashier quick PIN login at a terminal — fast switching on a shared machine
-authRouter.post("/cashier/login", async (req, res) => {
+authRouter.post("/cashier/login", loginLimiter, async (req, res) => {
   const { cashierId, pin, terminalId } = req.body;
   if (!cashierId || !pin || !terminalId) {
     return res.status(400).json({ error: "cashierId, pin, terminalId are required" });
@@ -64,7 +79,7 @@ authRouter.post("/cashier/auto-lock", requireAuth, async (req, res) => {
 });
 
 // Admin full username/password login
-authRouter.post("/admin/login", async (req, res) => {
+authRouter.post("/admin/login", loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
 
