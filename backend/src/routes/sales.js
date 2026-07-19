@@ -223,27 +223,123 @@ salesRouter.post("/", requireAuth, async (req, res) => {
 });
 
 salesRouter.get("/", requireAuth, async (req, res) => {
-  const { from, to, terminalId, cashierId } = req.query;
-  const sales = await prisma.sale.findMany({
-    where: {
-      createdAt: {
-        gte: from ? new Date(from) : undefined,
-        lte: to ? new Date(to) : undefined,
-      },
-      terminalId: terminalId || undefined,
-      cashierId: cashierId || undefined,
+  const { from, to, terminalId, cashierId, customerId, paymentMethod, q, page = "1", pageSize = "50" } = req.query;
+
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  // Cap pageSize so a crafted request can't force one huge, slow query.
+  const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 50));
+
+  const where = {
+    createdAt: {
+      gte: from ? new Date(from) : undefined,
+      // Treat `to` as inclusive of the whole day when only a date (no time) is given.
+      lte: to ? new Date(new Date(to).setHours(23, 59, 59, 999)) : undefined,
     },
-    include: { items: true, customer: true, cashier: true, terminal: true },
-    orderBy: { createdAt: "desc" },
-    take: 200,
+    terminalId: terminalId || undefined,
+    cashierId: cashierId || undefined,
+    customerId: customerId || undefined,
+    paymentMethod: ["CASH", "LOAN", "PARTIAL"].includes(paymentMethod) ? paymentMethod : undefined,
+    // Search matches either the receipt/sale id or the customer's name — covers
+    // "customer walks in with a paper receipt" and "look up this customer's history".
+    ...(q
+      ? {
+          OR: [{ id: { contains: q } }, { customer: { name: { contains: q, mode: "insensitive" } } }],
+        }
+      : {}),
+  };
+
+  const [sales, totalCount, aggregate] = await Promise.all([
+    prisma.sale.findMany({
+      where,
+      include: {
+        items: true,
+        customer: true,
+        cashier: true,
+        terminal: true,
+        approvedBy: { select: { id: true, username: true } },
+        returns: { include: { items: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: (pageNum - 1) * pageSizeNum,
+      take: pageSizeNum,
+    }),
+    prisma.sale.count({ where }),
+    // Aggregated over the FULL filtered set (not just the current page), so the
+    // summary totals shown on the page are accurate no matter which page you're on.
+    prisma.sale.aggregate({
+      where,
+      _sum: { subtotal: true, discountAmount: true, total: true },
+    }),
+  ]);
+
+  res.json({
+    sales,
+    page: pageNum,
+    pageSize: pageSizeNum,
+    totalCount,
+    totalPages: Math.max(1, Math.ceil(totalCount / pageSizeNum)),
+    summary: {
+      count: totalCount,
+      subtotal: aggregate._sum.subtotal || 0,
+      discountAmount: aggregate._sum.discountAmount || 0,
+      total: aggregate._sum.total || 0,
+    },
   });
-  res.json(sales);
+});
+
+// Rebuilds the receipt for an already-completed sale — used by the sales
+// history page's "reprint" action. Reuses the exact same receipt builder as
+// checkout, just fed from stored sale data instead of a fresh transaction.
+salesRouter.get("/:id/receipt", requireAuth, async (req, res) => {
+  const sale = await prisma.sale.findUnique({
+    where: { id: req.params.id },
+    include: { items: { include: { product: true } }, customer: true, cashier: true, terminal: true },
+  });
+  if (!sale) return res.status(404).json({ error: "Not found" });
+
+  const [storeName, storeAddress, storePhone, logoUrl] = await Promise.all([
+    getSetting("STORE_NAME", "فروشگاه"),
+    getSetting("STORE_ADDRESS", ""),
+    getSetting("STORE_PHONE", ""),
+    getSetting("STORE_LOGO_URL", ""),
+  ]);
+
+  const receiptFields = {
+    storeName,
+    storeAddress,
+    storePhone,
+    terminalName: sale.terminal.name,
+    cashierName: sale.cashier.name,
+    saleId: sale.id,
+    createdAt: sale.createdAt,
+    items: sale.items.map((i) => ({ name: i.product.name, qty: i.qty, unitPrice: i.unitPrice, lineTotal: i.lineTotal })),
+    subtotal: sale.subtotal,
+    discountAmount: sale.discountAmount,
+    total: sale.total,
+    paymentMethod: sale.paymentMethod,
+    cashPaid: sale.cashPaid,
+    loanPaid: sale.loanPaid,
+    customerName: sale.customer?.name,
+  };
+
+  res.json({
+    receiptPrintJob: buildReceiptEscPos(receiptFields),
+    receiptText: buildReceiptPlainText(receiptFields),
+    logoUrl: logoUrl || null,
+  });
 });
 
 salesRouter.get("/:id", requireAuth, async (req, res) => {
   const sale = await prisma.sale.findUnique({
     where: { id: req.params.id },
-    include: { items: { include: { product: true } }, customer: true, cashier: true, terminal: true },
+    include: {
+      items: { include: { product: true } },
+      customer: true,
+      cashier: true,
+      terminal: true,
+      approvedBy: { select: { id: true, username: true } },
+      returns: { include: { items: true }, orderBy: { createdAt: "desc" } },
+    },
   });
   if (!sale) return res.status(404).json({ error: "Not found" });
   res.json(sale);

@@ -9,6 +9,7 @@ const items = [
   { to: "/suppliers", icon: "truck", label: "تامین‌کنندگان" },
   { to: "/reports", icon: "chart", label: "گزارش‌ها" },
   { to: "/returns", icon: "returnIcon", label: "مرجوعی" },
+  { to: "/sales-history", icon: "history", label: "سوابق فروش" },
 ];
 
 export default function NavRail() {
