@@ -170,7 +170,134 @@ authRouter.put("/cashiers/:id/deactivate", requireAdmin, async (req, res) => {
   await logAction({ adminId: req.auth.id, action: "cashier.deactivate", details: { cashierId: req.params.id } });
   res.json({ ok: true });
 });
+// Admin: rename a cashier
+authRouter.put("/cashiers/:id/name", requireAdmin, async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: "name required" });
 
+  const cashier = await prisma.cashier.findUnique({ where: { id: req.params.id } });
+  if (!cashier) return res.status(404).json({ error: "Cashier not found" });
+
+  const updated = await prisma.cashier.update({
+    where: { id: req.params.id },
+    data: { name: name.trim() },
+  });
+  await logAction({
+    adminId: req.auth.id,
+    action: "cashier.rename",
+    details: { cashierId: req.params.id, oldName: cashier.name, newName: updated.name },
+  });
+  res.json({ id: updated.id, name: updated.name });
+});
+
+// Admin: re-activate a previously deactivated cashier
+authRouter.put("/cashiers/:id/activate", requireAdmin, async (req, res) => {
+  await prisma.cashier.update({ where: { id: req.params.id }, data: { active: true } });
+  await logAction({ adminId: req.auth.id, action: "cashier.activate", details: { cashierId: req.params.id } });
+  res.json({ ok: true });
+});
+
+// Admin: permanently delete a cashier.
+// Only allowed if the cashier has no sales/returns/sessions tied to them,
+// since those records require a valid cashierId (deleting would break history).
+// If they have history, deactivate instead — that's what /cashiers/:id/deactivate is for.
+authRouter.delete("/cashiers/:id", requireAdmin, async (req, res) => {
+  const cashier = await prisma.cashier.findUnique({ where: { id: req.params.id } });
+  if (!cashier) return res.status(404).json({ error: "Cashier not found" });
+
+  const [saleCount, returnCount, sessionCount] = await Promise.all([
+    prisma.sale.count({ where: { cashierId: req.params.id } }),
+    prisma.return.count({ where: { cashierId: req.params.id } }),
+    prisma.cashierSession.count({ where: { cashierId: req.params.id } }),
+  ]);
+
+  if (saleCount > 0 || returnCount > 0 || sessionCount > 0) {
+    return res.status(409).json({
+      error: "This cashier has sales/return/session history and cannot be deleted. Deactivate them instead.",
+      saleCount,
+      returnCount,
+      sessionCount,
+    });
+  }
+
+  await prisma.cashier.delete({ where: { id: req.params.id } });
+  await logAction({ adminId: req.auth.id, action: "cashier.delete", details: { cashierId: req.params.id, name: cashier.name } });
+  res.json({ ok: true });
+});
+
+// Admin: update own username (requires current password to confirm identity)
+authRouter.put("/admin/username", requireAdmin, async (req, res) => {
+  const { newUsername, currentPassword } = req.body;
+  if (!newUsername || !newUsername.trim() || !currentPassword) {
+    return res.status(400).json({ error: "newUsername and currentPassword are required" });
+  }
+
+  const admin = await prisma.admin.findUnique({ where: { id: req.auth.id } });
+  if (!admin) return res.status(404).json({ error: "Admin not found" });
+
+  const ok = await bcrypt.compare(currentPassword, admin.passwordHash);
+  if (!ok) return res.status(401).json({ error: "Current password is incorrect" });
+
+  const existing = await prisma.admin.findUnique({ where: { username: newUsername.trim() } });
+  if (existing && existing.id !== admin.id) {
+    return res.status(409).json({ error: "Username already taken" });
+  }
+
+  const updated = await prisma.admin.update({
+    where: { id: admin.id },
+    data: { username: newUsername.trim() },
+  });
+  await logAction({ adminId: admin.id, action: "admin.username_update", details: { oldUsername: admin.username, newUsername: updated.username } });
+  res.json({ id: updated.id, username: updated.username });
+});
+
+// Admin: update own password (requires current password to confirm identity)
+authRouter.put("/admin/password", requireAdmin, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: "currentPassword and newPassword are required" });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: "New password must be at least 8 characters" });
+  }
+
+  const admin = await prisma.admin.findUnique({ where: { id: req.auth.id } });
+  if (!admin) return res.status(404).json({ error: "Admin not found" });
+
+  const ok = await bcrypt.compare(currentPassword, admin.passwordHash);
+  if (!ok) return res.status(401).json({ error: "Current password is incorrect" });
+
+  const newHash = await bcrypt.hash(newPassword, 10);
+  await prisma.admin.update({ where: { id: admin.id }, data: { passwordHash: newHash } });
+  await logAction({ adminId: admin.id, action: "admin.password_update" });
+  res.json({ ok: true });
+});
+
+// Admin: permanently delete a terminal.
+// Same safety rule as cashier delete — blocked if it has sales/returns/sessions history.
+authRouter.delete("/terminals/:id", requireAdmin, async (req, res) => {
+  const terminal = await prisma.terminal.findUnique({ where: { id: req.params.id } });
+  if (!terminal) return res.status(404).json({ error: "Terminal not found" });
+
+  const [saleCount, returnCount, sessionCount] = await Promise.all([
+    prisma.sale.count({ where: { terminalId: req.params.id } }),
+    prisma.return.count({ where: { terminalId: req.params.id } }),
+    prisma.cashierSession.count({ where: { terminalId: req.params.id } }),
+  ]);
+
+  if (saleCount > 0 || returnCount > 0 || sessionCount > 0) {
+    return res.status(409).json({
+      error: "This terminal has sales/return/session history and cannot be deleted.",
+      saleCount,
+      returnCount,
+      sessionCount,
+    });
+  }
+
+  await prisma.terminal.delete({ where: { id: req.params.id } });
+  await logAction({ adminId: req.auth.id, action: "terminal.delete", details: { terminalId: req.params.id, name: terminal.name } });
+  res.json({ ok: true });
+});
 // Terminals list/create (admin sets these up once per physical PC)
 authRouter.get("/terminals", async (req, res) => {
   res.json(await prisma.terminal.findMany({ orderBy: { name: "asc" } }));

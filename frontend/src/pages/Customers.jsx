@@ -80,7 +80,7 @@ export default function Customers() {
           <thead>
             <tr className="rtl text-xs text-subtle border-b border-line">
               <th className="text-right py-3 px-4">نام</th>
-              <th className="text-right py-3 px-4">شماره ملی (CNIC)</th>
+              <th className="text-right py-3 px-4">شماره ملی (NIC)</th>
               <th className="text-right py-3 px-4">آدرس</th>
               <th className="text-right py-3 px-4">تلفن</th>
               <th className="text-right py-3 px-4">سقف اعتبار</th>
