@@ -179,7 +179,7 @@ salesRouter.post("/", requireAuth, async (req, res) => {
       terminalId: req.auth.terminalId,
       cashierId: req.auth.id,
       action: "sale.create",
-      details: { saleId: result.id, total: result.total, paymentMethod },
+      details: { saleId: String(result.receiptNo).padStart(6, "0"), total: result.total, paymentMethod },
     });
 
     const [storeName, storeAddress, storePhone, logoUrl] = await Promise.all([
@@ -195,7 +195,7 @@ salesRouter.post("/", requireAuth, async (req, res) => {
       storePhone,
       terminalName: result.terminal.name,
       cashierName: result.cashier.name,
-      saleId: result.id,
+      saleId: String(result.receiptNo).padStart(6, "0"),
       createdAt: result.createdAt,
       items: result.items.map((i) => ({ name: i.product.name, qty: i.qty, unitPrice: i.unitPrice, lineTotal: i.lineTotal })),
       subtotal: result.subtotal,
@@ -310,7 +310,7 @@ salesRouter.get("/:id/receipt", requireAuth, async (req, res) => {
     storePhone,
     terminalName: sale.terminal.name,
     cashierName: sale.cashier.name,
-    saleId: sale.id,
+    saleId: String(sale.receiptNo).padStart(6, "0"),
     createdAt: sale.createdAt,
     items: sale.items.map((i) => ({ name: i.product.name, qty: i.qty, unitPrice: i.unitPrice, lineTotal: i.lineTotal })),
     subtotal: sale.subtotal,

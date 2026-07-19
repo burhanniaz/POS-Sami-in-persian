@@ -123,6 +123,7 @@ enum SaleStatus {
 
 model Sale {
   id              String        @id @default(cuid())
+  receiptNo       Int           @unique @default(autoincrement())
   terminal        Terminal      @relation(fields: [terminalId], references: [id])
   terminalId      String
   cashier         Cashier       @relation(fields: [cashierId], references: [id])

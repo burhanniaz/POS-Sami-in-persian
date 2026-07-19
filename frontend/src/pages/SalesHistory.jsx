@@ -197,7 +197,7 @@ export default function SalesHistory() {
                   onClick={() => setSelectedId(sale.id)}
                   className="border-b border-line last:border-0 cursor-pointer hover:bg-paper"
                 >
-                  <td className="py-2 px-3 num text-right">{sale.id.slice(-8)}</td>
+                  <td className="py-2 px-3 num text-right">{String(sale.receiptNo).padStart(6, "0")}</td>
                   <td className="py-2 px-3 num text-right">{formatDate(sale.createdAt)}</td>
                   <td className="py-2 px-3 rtl">{sale.cashier?.name || "—"}</td>
                   <td className="py-2 px-3 rtl">{sale.customer?.name || "فروش نقدی"}</td>
@@ -290,7 +290,7 @@ function SaleDetailModal({ saleId, onClose }) {
           <>
             <div className="flex items-center justify-between mb-1">
               <div>
-                <p className="num text-sm font-medium">#{sale.id.slice(-8)}</p>
+                <p className="num text-sm font-medium">#{String(sale.receiptNo).padStart(6, "0")}</p>
                 <p className="rtl text-xs text-subtle num">
                   {formatDate(sale.createdAt)} — {sale.terminal.name} — {sale.cashier.name}
                 </p>
