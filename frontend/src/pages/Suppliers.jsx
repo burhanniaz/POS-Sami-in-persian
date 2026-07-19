@@ -86,8 +86,8 @@ export default function Suppliers() {
 
       <div className="bg-card rounded-card overflow-hidden overflow-x-auto">
         <table className="w-full text-sm">
-          <thead>
-            <tr className="rtl text-xs text-subtle border-b border-line">
+<thead>
+            <tr className="text-xs text-subtle border-b border-line">
               <th className="text-right py-3 px-4">نام</th>
               <th className="text-right py-3 px-4">شماره ملی (NIC)</th>
               <th className="text-right py-3 px-4">آدرس</th>
@@ -101,11 +101,11 @@ export default function Suppliers() {
             {suppliers.map((s) => (
               <tr key={s.id} className="border-b border-line last:border-0">
                 <td className="rtl py-3 px-4 whitespace-nowrap">{s.name}</td>
-                <td className="num py-3 px-4 text-subtle whitespace-nowrap">{s.nic || "—"}</td>
+                <td className="num text-right py-3 px-4 text-subtle whitespace-nowrap">{s.nic || "—"}</td>
                 <td className="rtl py-3 px-4 text-subtle">{s.address || "—"}</td>
-                <td className="num py-3 px-4 text-subtle whitespace-nowrap">{s.phone || "—"}</td>
-                <td className="num py-3 px-4 whitespace-nowrap">{formatMoney(s.creditLimit)}</td>
-                <td className="num py-3 px-4 whitespace-nowrap">{formatMoney(s.loanBalance)}</td>
+                <td className="num text-right py-3 px-4 text-subtle whitespace-nowrap">{s.phone || "—"}</td>
+                <td className="num text-right py-3 px-4 whitespace-nowrap">{formatMoney(s.creditLimit)}</td>
+                <td className="num text-right py-3 px-4 whitespace-nowrap">{formatMoney(s.loanBalance)}</td>
                 <td className="py-3 px-4">
                   <div className="flex gap-3 justify-end whitespace-nowrap">
                     <button onClick={() => addDebt(s)} className="rtl text-xs text-subtle">
