@@ -177,15 +177,15 @@ export default function SalesHistory() {
       <div className="bg-card rounded-card p-3">
         <table className="w-full text-xs">
           <thead>
-            <tr className="rtl text-subtle border-b border-line">
-              <th className="text-right py-2">رسید</th>
-              <th className="text-right py-2">تاریخ</th>
-              <th className="text-right py-2">صندوق‌دار</th>
-              <th className="text-right py-2">مشتری</th>
-              <th className="text-right py-2">اقلام</th>
-              <th className="text-right py-2">مبلغ</th>
-              <th className="text-right py-2">پرداخت</th>
-              <th className="text-right py-2">وضعیت</th>
+            <tr className="text-subtle border-b border-line">
+              <th className="text-right py-2 px-3">رسید</th>
+              <th className="text-right py-2 px-3">تاریخ</th>
+              <th className="text-right py-2 px-3">صندوق‌دار</th>
+              <th className="text-right py-2 px-3">مشتری</th>
+              <th className="text-right py-2 px-3">اقلام</th>
+              <th className="text-right py-2 px-3">مبلغ</th>
+              <th className="text-right py-2 px-3">پرداخت</th>
+              <th className="text-right py-2 px-3">وضعیت</th>
             </tr>
           </thead>
           <tbody>
@@ -197,18 +197,18 @@ export default function SalesHistory() {
                   onClick={() => setSelectedId(sale.id)}
                   className="border-b border-line last:border-0 cursor-pointer hover:bg-paper"
                 >
-                  <td className="py-2 num">{sale.id.slice(-8)}</td>
-                  <td className="py-2 num">{formatDate(sale.createdAt)}</td>
-                  <td className="py-2 rtl">{sale.cashier?.name || "—"}</td>
-                  <td className="py-2 rtl">{sale.customer?.name || "فروش نقدی"}</td>
-                  <td className="py-2 num">{sale.items.length}</td>
-                  <td className="py-2 num">{formatMoney(sale.total)}</td>
-                  <td className="py-2">
+                  <td className="py-2 px-3 num text-right">{sale.id.slice(-8)}</td>
+                  <td className="py-2 px-3 num text-right">{formatDate(sale.createdAt)}</td>
+                  <td className="py-2 px-3 rtl">{sale.cashier?.name || "—"}</td>
+                  <td className="py-2 px-3 rtl">{sale.customer?.name || "فروش نقدی"}</td>
+                  <td className="py-2 px-3 num text-right">{sale.items.length}</td>
+                  <td className="py-2 px-3 num text-right">{formatMoney(sale.total)}</td>
+                  <td className="py-2 px-3 text-right">
                     <span className="rtl text-[11px] px-2 py-0.5 rounded-lg bg-accent-light text-accent-dark">
                       {PAYMENT_LABELS[sale.paymentMethod] || sale.paymentMethod}
                     </span>
                   </td>
-                  <td className="py-2 rtl">
+                  <td className="py-2 px-3 rtl">
                     {status === "fully" && <span className="text-danger">مرجوع کامل</span>}
                     {status === "partially" && <span className="text-warn">مرجوع جزئی</span>}
                     {!status && sale.approvedById && <span className="text-subtle">تخفیف با تایید</span>}
@@ -303,24 +303,24 @@ function SaleDetailModal({ saleId, onClose }) {
 
             <p className="rtl text-xs text-subtle mb-3">مشتری: {sale.customer?.name || "فروش نقدی"}</p>
 
-            <table className="w-full text-xs mb-3">
+<table className="w-full text-xs mb-3">
               <thead>
-                <tr className="rtl text-subtle border-b border-line">
-                  <th className="text-right py-1">کالا</th>
-                  <th className="text-right py-1">تعداد</th>
-                  <th className="text-right py-1">قیمت</th>
-                  <th className="text-right py-1">تخفیف</th>
-                  <th className="text-right py-1">جمع</th>
+                <tr className="text-subtle border-b border-line">
+                  <th className="text-right py-1 px-2">کالا</th>
+                  <th className="text-right py-1 px-2">تعداد</th>
+                  <th className="text-right py-1 px-2">قیمت</th>
+                  <th className="text-right py-1 px-2">تخفیف</th>
+                  <th className="text-right py-1 px-2">جمع</th>
                 </tr>
               </thead>
               <tbody>
                 {sale.items.map((i) => (
                   <tr key={i.id} className="border-b border-line last:border-0">
-                    <td className="py-1 rtl">{i.product.name}</td>
-                    <td className="py-1 num">{i.qty}</td>
-                    <td className="py-1 num">{formatMoney(i.unitPrice)}</td>
-                    <td className="py-1 num">{formatMoney(i.discountAmount)}</td>
-                    <td className="py-1 num">{formatMoney(i.lineTotal)}</td>
+                    <td className="py-1 px-2 rtl">{i.product.name}</td>
+                    <td className="py-1 px-2 num text-right">{i.qty}</td>
+                    <td className="py-1 px-2 num text-right">{formatMoney(i.unitPrice)}</td>
+                    <td className="py-1 px-2 num text-right">{formatMoney(i.discountAmount)}</td>
+                    <td className="py-1 px-2 num text-right">{formatMoney(i.lineTotal)}</td>
                   </tr>
                 ))}
               </tbody>
