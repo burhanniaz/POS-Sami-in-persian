@@ -60,11 +60,14 @@ model CashierSession {
 // ---------- Catalog ----------
 
 model Supplier {
-  id        String   @id @default(cuid())
-  name      String
-  contact   String?
-  phone     String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  name        String
+  nic         String?  // national ID / registration number
+  address     String?
+  phone       String?  // contact number
+  creditLimit Decimal  @default(0) @db.Decimal(12, 2) // credit terms this supplier extends to the store
+  loanBalance Decimal  @default(0) @db.Decimal(12, 2) // amount the store currently owes this supplier
+  createdAt   DateTime @default(now())
 
   products Product[]
 }
