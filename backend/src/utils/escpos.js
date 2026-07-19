@@ -59,10 +59,7 @@ export function buildReceiptEscPos({
   out += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
   if (storeAddress) out += storeAddress + "\n";
   if (storePhone) out += storePhone + "\n";
-  out += CMD.ALIGN_LEFT + line();
-  out += `Terminal: ${terminalName}  Cashier: ${cashierName}\n`;
-  out += `Sale #${saleId}\n${new Date(createdAt).toISOString()}\n`;
-  out += line();
+
 
   for (const it of items) {
     out += padRight(it.name, 20) + padLeft(it.qty, 4) + padLeft(it.lineTotal, 8) + "\n";
@@ -111,7 +108,6 @@ export function buildReceiptPlainText({
   if (storeAddress) out += storeAddress + "\n";
   if (storePhone) out += storePhone + "\n";
   out += line();
-  out += `Terminal: ${terminalName}  Cashier: ${cashierName}\n`;
   out += `Sale #${saleId}\n${new Date(createdAt).toISOString()}\n`;
   out += line();
 
