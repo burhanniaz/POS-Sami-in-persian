@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import fileType from "file-type";
-const { fileTypeFromFile } = fileType;
+const { fromFile: fileTypeFromFile } = fileType;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
