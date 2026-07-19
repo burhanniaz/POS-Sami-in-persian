@@ -1,20 +1,24 @@
 FROM node:20-alpine
 
+# Prisma needs OpenSSL to detect the right query engine binary to use.
+# Alpine doesn't ship it by default — without this, the build still
+# succeeds (with a warning) but can crash at runtime once Prisma actually
+# tries to connect to the database with a mismatched engine.
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
-# Install dependencies first (better layer caching — this layer only
-# re-runs when package.json/package-lock.json actually change).
-# Includes devDependencies (prisma CLI) since we need `npx prisma generate`
-# in this same image — this is a single-stage build for simplicity.
+# Prisma's schema must be present before `npm ci`, because the postinstall
+# hook (`prisma generate`, defined in package.json) runs automatically
+# during npm ci — if the schema isn't copied in yet at that point, the
+# build fails with "Could not find Prisma Schema".
 COPY package.json package-lock.json ./
-RUN npm ci
-
-# Prisma needs its schema present before `prisma generate` (also runs
-# automatically via postinstall above, but we run it explicitly here too
-# so the build fails loudly and immediately if the schema has an error,
-# rather than surfacing as a confusing runtime crash later).
 COPY prisma ./prisma
-RUN npx prisma generate
+
+# Includes devDependencies (prisma CLI) since we need it in this same
+# image — this is a single-stage build for simplicity. This also runs
+# postinstall -> `prisma generate` now that the schema is present above.
+RUN npm ci
 
 # Now copy the rest of the source.
 COPY src ./src
