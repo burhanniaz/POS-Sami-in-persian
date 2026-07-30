@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Vazirmatn", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Ledger palette: deep ink/navy chrome, paper content areas, emerald for money-in, amber for caution, rose for debt/negative */
+  --color-ink-950: #0b1f2e;
+  --color-ink-900: #0f2a3d;
+  --color-ink-800: #163b53;
+  --color-ink-700: #1f4d6b;
+  --color-paper-50: #f7f8f7;
+  --color-paper-100: #eef0ee;
+  --color-paper-200: #e2e5e1;
+  --color-emerald-600: #1f9d74;
+  --color-emerald-700: #187a5b;
+  --color-amber-500: #d98e2b;
+  --color-rose-600: #c4453c;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-paper-100);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.font-tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* status rail signature element used across list rows */
+.status-rail {
+  border-inline-start-width: 4px;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--color-ink-800); border-radius: 8px; }
+
+/* Receipt printing: hide the whole app UI, show only the receipt marked #receipt-print.
+   80mm width matches standard thermal receipt paper - change to 58mm if your printer uses that size. */
+#receipt-print { position: fixed; left: -9999px; top: 0; }
+
+@media print {
+  body * { visibility: hidden; }
+  #receipt-print, #receipt-print * { visibility: visible; }
+  #receipt-print {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 80mm;
+  }
+  @page { margin: 0; size: 80mm auto; }
+}
