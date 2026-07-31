@@ -33,6 +33,8 @@ pos-app/
    curl -X POST http://localhost:4000/api/auth/bootstrap \
      -H "Content-Type: application/json" \
      -d '{"username":"admin","password":"YOUR_PASSWORD","full_name":"Admin"}'
+
+   Invoke-RestMethod -Uri "http://localhost:4000/api/auth/bootstrap" -Method Post -ContentType "application/json" -Body $body
    ```
 5. Log in at http://localhost:8080/login.
 
